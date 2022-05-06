@@ -14,9 +14,17 @@ namespace GivewayCheck
 {
     class Program
     {
-        static private string currentPath = Directory.GetParent(Environment.CurrentDirectory).Parent.Parent.Parent.FullName;
-        static private string participateGiveawayPath = $@"{currentPath}/Actual giveaways.txt";
-        static private string participateEndedGiveawayPath = $@"{currentPath}/Ended giveaways.txt";
+        static private string currentPath = Environment.CurrentDirectory;
+        static private string launchConfigurationPath = $@"{currentPath}/launchConfiguration.json";
+        static private string logPath = $@"{currentPath}/log.txt";
+
+        static private string lastLogMessage;
+
+        static private string participateGiveawayPath;
+        static private string endedGiveawayPath;
+        static private string discordServersPath;
+        static private string discordAccountsPath;
+        static private int countAccountsForRead;
 
         static private List<string> participateGiveawayList = new List<string>();
         static private List<string> participateEendedGiveawayList = new List<string>();
@@ -25,48 +33,66 @@ namespace GivewayCheck
 
         static async Task Main(string[] args)
         {
-            discordServers = await ReadAllDiscordGiveawayServersAsync();
-            discordAccounts = ReadAllAwalableDiscordAccounts(2, 4, 21, 9);
-            if (File.Exists(participateGiveawayPath))
-                participateGiveawayList = (await File.ReadAllLinesAsync(participateGiveawayPath)).ToList();
-            if (File.Exists(participateGiveawayPath))
-                participateEendedGiveawayList = (await File.ReadAllLinesAsync(participateEndedGiveawayPath)).ToList();
-            var discordRequest = new RestRequest();
-            //discordRequest = new RestRequest(@$"https://discord.com/api/v9/channels/895006097444864000/messages");
-            discordRequest.AddHeader("tts", false);
-            //discordRequest.AddHeader("authorization", discordAccounts.First().Token);
-            //var result = await new RestClient().ExecuteGetAsync(discordRequest);
-            while (true)
+            try
             {
-                Console.WriteLine($"[{DateTime.Now.ToLongTimeString()}] Checking discord servers for giveaways...");
-                var discordServerIndex = 0;
-                var discordAccountIndex = 0;
-                while (discordServerIndex < discordServers.Count)
+                var launchConfiguration = JObject.Parse(await File.ReadAllTextAsync(launchConfigurationPath));
+                participateGiveawayPath = launchConfiguration["participateGiveawayPath"].ToString();
+                endedGiveawayPath = launchConfiguration["endedGiveawayPath"].ToString();
+                discordServersPath = launchConfiguration["discordServersPath"].ToString();
+                discordAccountsPath = launchConfiguration["discordAccountsPath"].ToString();
+                countAccountsForRead = int.Parse(launchConfiguration["countAccountsForRead"].ToString());
+
+                discordServers = await ReadAllDiscordGiveawayServersAsync();
+                discordAccounts = ReadAllAwalableDiscordAccounts(2, 4, countAccountsForRead + 1, 9);
+                if (File.Exists(participateGiveawayPath))
+                    participateGiveawayList = (await File.ReadAllLinesAsync(participateGiveawayPath)).ToList();
+                if (File.Exists(endedGiveawayPath))
+                    participateEendedGiveawayList = (await File.ReadAllLinesAsync(endedGiveawayPath)).ToList();
+
+                var discordRequest = new RestRequest();
+                discordRequest.AddHeader("tts", false);
+                while (true)
                 {
-                    discordRequest.AddHeader("authorization", discordAccounts[discordAccountIndex].Token);
-                    RestClient restClient = CreateRestClient(discordAccounts[discordAccountIndex]?.Proxy);
-                    discordRequest.Resource = $"https://discord.com/api/v9/guilds/{discordServers[discordServerIndex].Id}" +
-                        $"/messages/search?author_id={discordServers[discordServerIndex].GiveawayBot.Id}";
-                    var lastBotMessagesRespounce = await restClient.ExecuteGetAsync(discordRequest);
-                    if (!lastBotMessagesRespounce.IsSuccessful)
+                    lastLogMessage = $"[{DateTime.Now.ToLongTimeString()}] Проверка дискорд серверов на наличие гива...";
+                    await WriteMessageInLogFileAsync(lastLogMessage);
+                    Console.WriteLine(lastLogMessage);
+                    var discordServerIndex = 0;
+                    var discordAccountIndex = 0;
+                    while (discordServerIndex < discordServers.Count)
                     {
-                        discordAccountIndex++;
-                        if (discordAccountIndex == discordAccounts.Count)
-                            discordAccountIndex = 0;
-                        continue;
+                        discordRequest.AddHeader("authorization", discordAccounts[discordAccountIndex].Token);
+                        RestClient restClient = CreateRestClient(discordAccounts[discordAccountIndex]?.Proxy);
+                        discordRequest.Resource = $"https://discord.com/api/v9/guilds/{discordServers[discordServerIndex].Id}" +
+                            $"/messages/search?author_id={discordServers[discordServerIndex].GiveawayBot.Id}";
+                        var lastBotMessagesRespounce = await restClient.ExecuteGetAsync(discordRequest);
+                        if (!lastBotMessagesRespounce.IsSuccessful)
+                        {
+                            discordAccountIndex++;
+                            if (discordAccountIndex == discordAccounts.Count)
+                                discordAccountIndex = 0;
+                            continue;
+                        }
+                        var lastBotMessages = JArray.Parse(JObject.Parse(lastBotMessagesRespounce.Content)["messages"].ToString());
+                        foreach (var message in lastBotMessages)
+                        {
+                            var giveawayPath = $@"{discordServers[discordServerIndex].Id}/{message.First["channel_id"]}/{message.First["id"]}";
+                            await CheckMessageForGiveaway(message, giveawayPath, discordRequest, discordServerIndex);
+                            await CheckGiveawayForEnded(giveawayPath, message);
+                        }
+                        discordServerIndex++;
                     }
-                    var lastBotMessages = JArray.Parse(JObject.Parse(lastBotMessagesRespounce.Content)["messages"].ToString());
-                    foreach (var message in lastBotMessages)
-                    {
-                        var giveawayPath = $@"{discordServers[discordServerIndex].Id}/{message.First["channel_id"]}/{message.First["id"]}";
-                        await CheckMessageForGiveaway(message, giveawayPath, discordRequest, discordServerIndex);
-                        await CheckGiveawayForEnded(giveawayPath, message);
-                    }
-                    discordServerIndex++;
                 }
+            }
+            catch (Exception ex)
+            {
+                lastLogMessage = $"Случилась непредвиденная ошибка: {ex.Message}";
+                await WriteMessageInLogFileAsync(lastLogMessage);
+                Console.WriteLine(lastLogMessage);
+                Console.ReadLine();
             }
         }
 
+        static private async Task WriteMessageInLogFileAsync(string mesage) => await File.AppendAllTextAsync(logPath, mesage + "\n");
         static private async Task CheckMessageForGiveaway(JToken message, string giveawayPath, RestRequest discordRequest, int discordServerIndex)
         {
             if (DateTime.Now < DateTime.Parse(message.First["timestamp"].ToString()).AddDays(2) &&
@@ -82,11 +108,11 @@ namespace GivewayCheck
                 !string.IsNullOrEmpty(message.First?["embeds"].First?["footer"]?["text"].ToString()) &&
                 message.First["embeds"].First["footer"]["text"].ToString().Contains("Ended"))
             {
-                Console.WriteLine($"[{DateTime.Now.ToLongTimeString()}] this {giveawayPath} giveaway is ended");
+                Console.WriteLine($"[{DateTime.Now.ToLongTimeString()}] Этот {giveawayPath} гив окончен");
                 participateGiveawayList.Remove(giveawayPath);
                 participateEendedGiveawayList.Add(giveawayPath);
                 await File.WriteAllLinesAsync(participateGiveawayPath, participateGiveawayList);
-                await File.WriteAllLinesAsync(participateEndedGiveawayPath, participateEendedGiveawayList);
+                await File.WriteAllLinesAsync(endedGiveawayPath, participateEendedGiveawayList);
             }
         }
         static private async Task ReactMessageFromAllDiscordAccountAsync(RestRequest discordRequest, DiscordServer discordServer, JToken message)
@@ -104,17 +130,27 @@ namespace GivewayCheck
                 var resultRespounce = await client.ExecutePutAsync(discordRequest);
                 if (!resultRespounce.IsSuccessful)
                 {
-                    Console.WriteLine($"[{DateTime.Now.ToLongTimeString()}] Failed to react {discordAccount.Proxy.Address} " +
-                        $"to the message {giveawayPath}: {resultRespounce.Content}");
+                    if (resultRespounce.Content.Contains("Unauthorized"))
+                        lastLogMessage = $"[{DateTime.Now.ToLongTimeString()}] Ошибка при реакте {discordAccount.Token} " +
+                            $"этого сообщения {giveawayPath}: токен устарел";
+                    else if (resultRespounce.Content.Contains("Access"))
+                        lastLogMessage = $"[{DateTime.Now.ToLongTimeString()}] Ошибка при реакте {discordAccount.Token} " +
+                            $"этого сообщения {giveawayPath}: этого аккаунта нет на сервере либо у него нет доступа к каналу гива";
+                    else
+                        lastLogMessage = $"[{DateTime.Now.ToLongTimeString()}] Ошибка при реакте {discordAccount.Token} " +
+                            $"этого сообщения {giveawayPath}: {resultRespounce.Content}";
+                    Console.WriteLine(lastLogMessage);
+                    await WriteMessageInLogFileAsync(lastLogMessage);
                 }
                 else
                     addedReactDiscordAccountsCount++;
             }
             participateGiveawayList.Add($@"{discordServer.Id}/{channelId}/{messageId}");
             await File.WriteAllLinesAsync(participateGiveawayPath, participateGiveawayList);
-            Console.WriteLine($"[{DateTime.Now.ToLongTimeString()}] {addedReactDiscordAccountsCount}/{discordAccounts.Count} " +
-                    $"червя бахнули лайки - {discordServer.Id}/{channelId}/{messageId}");
-            Console.Beep(2000, 1000);
+            lastLogMessage = $"[{DateTime.Now.ToLongTimeString()}] {addedReactDiscordAccountsCount}/{discordAccounts.Count} " +
+                    $"червя бахнули лайки - {discordServer.Id}/{channelId}/{messageId}";
+            await WriteMessageInLogFileAsync(lastLogMessage);
+            Console.WriteLine(lastLogMessage);
         }
         static private RestClient CreateRestClient(Proxy proxy)
         {
@@ -135,7 +171,7 @@ namespace GivewayCheck
         }
         static private async Task<List<DiscordServer>> ReadAllDiscordGiveawayServersAsync()
         {
-            var stringJsonDiscordSevers = JObject.Parse(await File.ReadAllTextAsync(@$"{currentPath}\Servers.json"));
+            var stringJsonDiscordSevers = JObject.Parse(await File.ReadAllTextAsync(discordServersPath));
             var jsonArrayDiscordServers = JArray.Parse(stringJsonDiscordSevers["discordServers"].ToString());
             return jsonArrayDiscordServers
                 .Select(discordServer => new DiscordServer(
@@ -150,9 +186,9 @@ namespace GivewayCheck
         {
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
             var discordAccounts = new List<DiscordAccount>();
-            var sheet = new ExcelPackage(@"C:\Users\kakaw\OneDrive\Рабочий стол\Аккаунты.xlsx").Workbook.Worksheets.First();
+            var sheet = new ExcelPackage(discordAccountsPath).Workbook.Worksheets.First();
             var resultValues = (object[,])sheet.Cells[fromRow, fromColumn, toRow, toColumn].Value;
-            for (int rowIndex = 0; rowIndex <= 19; rowIndex++)
+            for (int rowIndex = 0; rowIndex <= toRow - 2; rowIndex++)
             {
                 if (string.IsNullOrEmpty(resultValues[rowIndex, 0]?.ToString()) || resultValues[rowIndex, 5].ToString() == "0")
                     continue;
