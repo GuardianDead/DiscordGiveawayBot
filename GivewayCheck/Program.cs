@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 
 namespace GivewayCheck
 {
-    class Program
+    static class Program
     {
         static private string currentPath = Environment.CurrentDirectory;
         static private string launchConfigurationPath = $@"{currentPath}/launchConfiguration.json";
@@ -24,7 +24,6 @@ namespace GivewayCheck
         static private string endedGiveawayPath;
         static private string discordServersPath;
         static private string discordAccountsPath;
-        static private int countAccountsForRead;
 
         static private List<string> participateGiveawayList = new List<string>();
         static private List<string> participateEendedGiveawayList = new List<string>();
@@ -40,7 +39,7 @@ namespace GivewayCheck
                 endedGiveawayPath = launchConfiguration["endedGiveawayPath"].ToString();
                 discordServersPath = launchConfiguration["discordServersPath"].ToString();
                 discordAccountsPath = launchConfiguration["discordAccountsPath"].ToString();
-                countAccountsForRead = int.Parse(launchConfiguration["countAccountsForRead"].ToString());
+                var countAccountsForRead = int.Parse(launchConfiguration["countAccountsForRead"].ToString());
 
                 discordServers = await ReadAllDiscordGiveawayServersAsync();
                 discordAccounts = ReadAllAwalableDiscordAccounts(2, 4, countAccountsForRead + 1, 9);
@@ -67,6 +66,7 @@ namespace GivewayCheck
                         var lastBotMessagesRespounce = await restClient.ExecuteGetAsync(discordRequest);
                         if (!lastBotMessagesRespounce.IsSuccessful)
                         {
+                            await WriteMessageInLogFileAsync("");
                             discordAccountIndex++;
                             if (discordAccountIndex == discordAccounts.Count)
                                 discordAccountIndex = 0;
@@ -77,6 +77,7 @@ namespace GivewayCheck
                         {
                             var giveawayPath = $@"{discordServers[discordServerIndex].Id}/{message.First["channel_id"]}/{message.First["id"]}";
                             await CheckMessageForGiveaway(message, giveawayPath, discordRequest, discordServerIndex);
+                            await CheckMesssageForRumbleButtle(message, giveawayPath, discordRequest, discordServerIndex);
                             await CheckGiveawayForEnded(giveawayPath, message);
                         }
                         discordServerIndex++;
@@ -92,13 +93,22 @@ namespace GivewayCheck
             }
         }
 
-        static private async Task WriteMessageInLogFileAsync(string mesage) => await File.AppendAllTextAsync(logPath, mesage + "\n");
+
+        static private async Task WriteMessageInLogFileAsync(string message) => await File.AppendAllTextAsync(logPath, message + "\n");
         static private async Task CheckMessageForGiveaway(JToken message, string giveawayPath, RestRequest discordRequest, int discordServerIndex)
         {
             if (DateTime.Now < DateTime.Parse(message.First["timestamp"].ToString()).AddDays(2) &&
                 !participateGiveawayList.Contains(giveawayPath) &&
                 !string.IsNullOrEmpty(message.First?["embeds"].First?["footer"]?["text"].ToString()) &&
                 message.First["embeds"].First["footer"]["text"].ToString().Contains("Ends"))
+                await ReactMessageFromAllDiscordAccountAsync(discordRequest, discordServers[discordServerIndex], message);
+        }
+        private static async Task CheckMesssageForRumbleButtle(JToken message, string giveawayPath, RestRequest discordRequest, int discordServerIndex)
+        {
+            if (DateTime.Now < DateTime.Parse(message.First["timestamp"].ToString()).AddHours(1) &&
+                !participateGiveawayList.Contains(giveawayPath) &&
+                !string.IsNullOrEmpty(message.First?["embeds"].First?["description"]?.ToString()) &&
+                message.First["embeds"].First["description"].ToString().Contains("Click the emoji below to join"))
                 await ReactMessageFromAllDiscordAccountAsync(discordRequest, discordServers[discordServerIndex], message);
         }
         static private async Task CheckGiveawayForEnded(string giveawayPath, JToken message)
@@ -125,6 +135,7 @@ namespace GivewayCheck
             discordRequest.Resource = $"https://discord.com/api/v9/channels/{channelId}/messages/{messageId}/reactions/{discordServer.GiveawayBot.Emoji}/@me";
             foreach (var discordAccount in discordAccounts)
             {
+                await Task.Delay(new Random().Next(1, 3));
                 RestClient client = CreateRestClient(discordAccount?.Proxy);
                 discordRequest.AddOrUpdateHeader("authorization", discordAccount.Token);
                 var resultRespounce = await client.ExecutePutAsync(discordRequest);
