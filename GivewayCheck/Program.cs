@@ -25,6 +25,13 @@ namespace GivewayCheck
         static private string discordServersPath;
         static private string discordAccountsPath;
 
+        static private int countAccountsForRead;
+
+        static private int minDelayDiscordServersCheck;
+        static private int maxDelayDiscordServersCheck;
+        static private int minDelayDiscordAccountReact;
+        static private int maxDelayDiscordAccountReact;
+
         static private List<string> participateGiveawayList = new List<string>();
         static private List<string> participateEendedGiveawayList = new List<string>();
         static private List<DiscordAccount> discordAccounts;
@@ -34,12 +41,7 @@ namespace GivewayCheck
         {
             try
             {
-                var launchConfiguration = JObject.Parse(await File.ReadAllTextAsync(launchConfigurationPath));
-                participateGiveawayPath = launchConfiguration["participateGiveawayPath"].ToString();
-                endedGiveawayPath = launchConfiguration["endedGiveawayPath"].ToString();
-                discordServersPath = launchConfiguration["discordServersPath"].ToString();
-                discordAccountsPath = launchConfiguration["discordAccountsPath"].ToString();
-                var countAccountsForRead = int.Parse(launchConfiguration["countAccountsForRead"].ToString());
+                await ReadAllJsonConfigurationPropertiesAsync();
 
                 discordServers = await ReadAllDiscordGiveawayServersAsync();
                 discordAccounts = ReadAllAwalableDiscordAccounts(2, 4, countAccountsForRead + 1, 9);
@@ -81,6 +83,7 @@ namespace GivewayCheck
                             await CheckGiveawayForEnded(giveawayPath, message);
                         }
                         discordServerIndex++;
+                        await Task.Delay(new Random().Next(minDelayDiscordServersCheck, maxDelayDiscordServersCheck) * 1000);
                     }
                 }
             }
@@ -92,7 +95,6 @@ namespace GivewayCheck
                 Console.ReadLine();
             }
         }
-
 
         static private async Task WriteMessageInLogFileAsync(string message) => await File.AppendAllTextAsync(logPath, message + "\n");
         static private async Task CheckMessageForGiveaway(JToken message, string giveawayPath, RestRequest discordRequest, int discordServerIndex)
@@ -135,7 +137,6 @@ namespace GivewayCheck
             discordRequest.Resource = $"https://discord.com/api/v9/channels/{channelId}/messages/{messageId}/reactions/{discordServer.GiveawayBot.Emoji}/@me";
             foreach (var discordAccount in discordAccounts)
             {
-                await Task.Delay(new Random().Next(1, 3));
                 RestClient client = CreateRestClient(discordAccount?.Proxy);
                 discordRequest.AddOrUpdateHeader("authorization", discordAccount.Token);
                 var resultRespounce = await client.ExecutePutAsync(discordRequest);
@@ -155,6 +156,7 @@ namespace GivewayCheck
                 }
                 else
                     addedReactDiscordAccountsCount++;
+                await Task.Delay(new Random().Next(minDelayDiscordAccountReact, maxDelayDiscordAccountReact));
             }
             participateGiveawayList.Add($@"{discordServer.Id}/{channelId}/{messageId}");
             await File.WriteAllLinesAsync(participateGiveawayPath, participateGiveawayList);
@@ -179,6 +181,31 @@ namespace GivewayCheck
             }
             else
                 return new RestClient();
+        }
+        static private async Task ReadAllJsonConfigurationPropertiesAsync()
+        {
+            var launchConfiguration = JObject.Parse(await File.ReadAllTextAsync(launchConfigurationPath));
+            participateGiveawayPath = launchConfiguration["participateGiveawayPath"].ToString();
+            endedGiveawayPath = launchConfiguration["endedGiveawayPath"].ToString();
+            discordServersPath = launchConfiguration["discordServersPath"].ToString();
+            discordAccountsPath = launchConfiguration["discordAccountsPath"].ToString();
+            countAccountsForRead = int.Parse(launchConfiguration["countAccountsForRead"].ToString());
+            var delaysDiscordServersCheck = launchConfiguration["delayBeforeDiscordServersCheck"].ToString().Split('-');
+            var delaysDiscordAccountReact = launchConfiguration["delayBeforeDiscordAccountReact"].ToString().Split('-');
+            if (delaysDiscordServersCheck.Length == 2)
+            {
+                minDelayDiscordServersCheck = int.Parse(delaysDiscordServersCheck.First());
+                maxDelayDiscordServersCheck = int.Parse(delaysDiscordServersCheck.Last());
+            }
+            else if (delaysDiscordServersCheck.Length == 1)
+                maxDelayDiscordServersCheck = int.Parse(delaysDiscordServersCheck.First());
+            if (delaysDiscordAccountReact.Length == 2)
+            {
+                minDelayDiscordAccountReact = int.Parse(delaysDiscordAccountReact.First());
+                maxDelayDiscordAccountReact = int.Parse(delaysDiscordAccountReact.Last());
+            }
+            else if (delaysDiscordAccountReact.Length == 1)
+                maxDelayDiscordAccountReact = int.Parse(delaysDiscordAccountReact.First());
         }
         static private async Task<List<DiscordServer>> ReadAllDiscordGiveawayServersAsync()
         {
