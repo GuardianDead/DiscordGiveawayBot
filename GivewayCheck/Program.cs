@@ -20,6 +20,7 @@ namespace GivewayCheck
 
         static private string lastLogMessage;
 
+        static private string badPhrasesPath;
         static private string participateGiveawayPath;
         static private string endedGiveawayPath;
         static private string discordServersPath;
@@ -32,8 +33,9 @@ namespace GivewayCheck
         static private int minDelayDiscordAccountReact;
         static private int maxDelayDiscordAccountReact;
 
+        static private List<string> badPhrases = new List<string>();
         static private List<string> participateGiveawayList = new List<string>();
-        static private List<string> participateEendedGiveawayList = new List<string>();
+        static private List<string> participateEndedGiveawayList = new List<string>();
         static private List<DiscordAccount> discordAccounts;
         static private List<DiscordServer> discordServers;
 
@@ -41,20 +43,14 @@ namespace GivewayCheck
         {
             try
             {
-                await ReadAllJsonConfigurationPropertiesAsync();
-
-                discordServers = await ReadAllDiscordGiveawayServersAsync();
-                discordAccounts = ReadAllAwalableDiscordAccounts(2, 4, countAccountsForRead + 1, 9);
-                if (File.Exists(participateGiveawayPath))
-                    participateGiveawayList = (await File.ReadAllLinesAsync(participateGiveawayPath)).ToList();
-                if (File.Exists(endedGiveawayPath))
-                    participateEendedGiveawayList = (await File.ReadAllLinesAsync(endedGiveawayPath)).ToList();
+                await ReadAllJsonConfigurationAsync();
+                await ReadAllFiles();
 
                 var discordRequest = new RestRequest();
                 discordRequest.AddHeader("tts", false);
                 while (true)
                 {
-                    lastLogMessage = $"[{DateTime.Now.ToLongTimeString()}] Проверка дискорд серверов на наличие гива...";
+                    lastLogMessage = $"[{DateTime.Now.ToLongTimeString()}] Начата проверка дискорд серверов на наличие гива...";
                     await WriteMessageInLogFileAsync(lastLogMessage);
                     Console.WriteLine(lastLogMessage);
                     var discordServerIndex = 0;
@@ -65,15 +61,16 @@ namespace GivewayCheck
                         RestClient restClient = CreateRestClient(discordAccounts[discordAccountIndex]?.Proxy);
                         discordRequest.Resource = $"https://discord.com/api/v9/guilds/{discordServers[discordServerIndex].Id}" +
                             $"/messages/search?author_id={discordServers[discordServerIndex].GiveawayBot.Id}";
+
                         var lastBotMessagesRespounce = await restClient.ExecuteGetAsync(discordRequest);
                         if (!lastBotMessagesRespounce.IsSuccessful)
                         {
-                            await WriteMessageInLogFileAsync("");
                             discordAccountIndex++;
                             if (discordAccountIndex == discordAccounts.Count)
                                 discordAccountIndex = 0;
                             continue;
                         }
+
                         var lastBotMessages = JArray.Parse(JObject.Parse(lastBotMessagesRespounce.Content)["messages"].ToString());
                         foreach (var message in lastBotMessages)
                         {
@@ -82,9 +79,14 @@ namespace GivewayCheck
                             await CheckMesssageForRumbleButtle(message, giveawayPath, discordRequest, discordServerIndex);
                             await CheckGiveawayForEnded(giveawayPath, message);
                         }
+
                         discordServerIndex++;
-                        await Task.Delay(new Random().Next(minDelayDiscordServersCheck, maxDelayDiscordServersCheck) * 1000);
                     }
+
+                    var delayInSecond = new Random().Next(minDelayDiscordServersCheck, maxDelayDiscordServersCheck);
+                    if (delayInSecond != 0)
+                        await WriteMessageInLogFileAsync($"[{DateTime.Now.ToLongTimeString()}] Спим {delayInSecond}с");
+                    await Task.Delay(delayInSecond * 1000);
                 }
             }
             catch (Exception ex)
@@ -96,14 +98,63 @@ namespace GivewayCheck
             }
         }
 
-        static private async Task WriteMessageInLogFileAsync(string message) => await File.AppendAllTextAsync(logPath, message + "\n");
+        static private async Task WriteMessageInLogFileAsync(string message) => await File.AppendAllTextAsync(logPath, message + Environment.NewLine);
+        static private async Task ReadAllJsonConfigurationAsync()
+        {
+            await WriteMessageInLogFileAsync($"[{DateTime.Now.ToLongTimeString()}] Читаем конфигурационный файл...");
+            var launchConfiguration = JObject.Parse(await File.ReadAllTextAsync(launchConfigurationPath));
+            participateGiveawayPath = launchConfiguration["participateGiveawayPath"].ToString();
+            endedGiveawayPath = launchConfiguration["endedGiveawayPath"].ToString();
+            discordServersPath = launchConfiguration["discordServersPath"].ToString();
+            discordAccountsPath = launchConfiguration["discordAccountsPath"].ToString();
+            countAccountsForRead = int.Parse(launchConfiguration["countAccountsForRead"].ToString());
+            badPhrasesPath = launchConfiguration["badPhrasesPath"].ToString();
+            var delaysDiscordServersCheck = launchConfiguration["delayBeforeDiscordServersCheck"].ToString().Split('-');
+            var delaysDiscordAccountReact = launchConfiguration["delayBeforeDiscordAccountReact"].ToString().Split('-');
+            if (delaysDiscordServersCheck.Length == 2)
+            {
+                minDelayDiscordServersCheck = int.Parse(delaysDiscordServersCheck.First());
+                maxDelayDiscordServersCheck = int.Parse(delaysDiscordServersCheck.Last());
+            }
+            else if (delaysDiscordServersCheck.Length == 1)
+                maxDelayDiscordServersCheck = int.Parse(delaysDiscordServersCheck.First());
+            if (delaysDiscordAccountReact.Length == 2)
+            {
+                minDelayDiscordAccountReact = int.Parse(delaysDiscordAccountReact.First());
+                maxDelayDiscordAccountReact = int.Parse(delaysDiscordAccountReact.Last());
+            }
+            else if (delaysDiscordAccountReact.Length == 1)
+                maxDelayDiscordAccountReact = int.Parse(delaysDiscordAccountReact.First());
+        }
+        static private async Task ReadAllFiles()
+        {
+            discordServers = await ReadAllDiscordGiveawayServersAsync();
+            discordAccounts = await ReadAllAwalableDiscordAccountsAsync(2, 4, countAccountsForRead + 1, 9);
+            await WriteMessageInLogFileAsync($"[{DateTime.Now.ToLongTimeString()}] Проверяем и возможно читаем имеющиеся гивы...");
+            if (File.Exists(participateGiveawayPath))
+                participateGiveawayList = (await File.ReadAllLinesAsync(participateGiveawayPath)).ToList();
+            await WriteMessageInLogFileAsync($"[{DateTime.Now.ToLongTimeString()}] Проверяем и возможно читаем имеющиеся законченые гивы...");
+            if (File.Exists(endedGiveawayPath))
+                participateEndedGiveawayList = (await File.ReadAllLinesAsync(endedGiveawayPath)).ToList();
+            await WriteMessageInLogFileAsync($"[{DateTime.Now.ToLongTimeString()}] Проверяем и возможно читаем имеющиеся плохие фразы для гива...");
+            if (File.Exists(badPhrasesPath))
+                badPhrases = (await File.ReadAllLinesAsync(badPhrasesPath)).ToList();
+        }
         static private async Task CheckMessageForGiveaway(JToken message, string giveawayPath, RestRequest discordRequest, int discordServerIndex)
         {
-            if (DateTime.Now < DateTime.Parse(message.First["timestamp"].ToString()).AddDays(2) &&
-                !participateGiveawayList.Contains(giveawayPath) &&
-                !string.IsNullOrEmpty(message.First?["embeds"].First?["footer"]?["text"].ToString()) &&
-                message.First["embeds"].First["footer"]["text"].ToString().Contains("Ends"))
-                await ReactMessageFromAllDiscordAccountAsync(discordRequest, discordServers[discordServerIndex], message);
+            if (!string.IsNullOrEmpty(message.First?["embeds"].First?["footer"]?["text"].ToString()) &&
+                !string.IsNullOrEmpty(message.First?["embeds"].First?["author"]?["name"].ToString()))
+            {
+                if (DateTime.Now < DateTime.Parse(message.First["timestamp"].ToString()).AddDays(2) &&
+                    !participateGiveawayList.Contains(giveawayPath) &&
+                    (message.First["embeds"].First["footer"]["text"].ToString().Contains("Ends") ||
+                    message.First["embeds"].First["footer"]["text"].ToString().Contains("winner")) &&
+                    !badPhrases.Any(badPrhase => message.First["embeds"].First["author"]["name"].ToString().Contains(badPrhase)))
+                {
+                    await WriteMessageInLogFileAsync($"[{DateTime.Now.ToLongTimeString()}] Найден гив по всем походящим параметрам - {giveawayPath}");
+                    await ReactMessageFromAllDiscordAccountAsync(discordRequest, discordServers[discordServerIndex], message);
+                }
+            }
         }
         private static async Task CheckMesssageForRumbleButtle(JToken message, string giveawayPath, RestRequest discordRequest, int discordServerIndex)
         {
@@ -111,20 +162,23 @@ namespace GivewayCheck
                 !participateGiveawayList.Contains(giveawayPath) &&
                 !string.IsNullOrEmpty(message.First?["embeds"].First?["description"]?.ToString()) &&
                 message.First["embeds"].First["description"].ToString().Contains("Click the emoji below to join"))
+            {
+                await WriteMessageInLogFileAsync($"[{DateTime.Now.ToLongTimeString()}] Найден рамбл по всем походящим параметрам - {giveawayPath}");
                 await ReactMessageFromAllDiscordAccountAsync(discordRequest, discordServers[discordServerIndex], message);
+            }
         }
         static private async Task CheckGiveawayForEnded(string giveawayPath, JToken message)
         {
             if (participateGiveawayList.Contains(giveawayPath) &&
-                !participateEendedGiveawayList.Contains(giveawayPath) &&
+                !participateEndedGiveawayList.Contains(giveawayPath) &&
                 !string.IsNullOrEmpty(message.First?["embeds"].First?["footer"]?["text"].ToString()) &&
                 message.First["embeds"].First["footer"]["text"].ToString().Contains("Ended"))
             {
                 Console.WriteLine($"[{DateTime.Now.ToLongTimeString()}] Этот {giveawayPath} гив окончен");
                 participateGiveawayList.Remove(giveawayPath);
-                participateEendedGiveawayList.Add(giveawayPath);
+                participateEndedGiveawayList.Add(giveawayPath);
                 await File.WriteAllLinesAsync(participateGiveawayPath, participateGiveawayList);
-                await File.WriteAllLinesAsync(endedGiveawayPath, participateEendedGiveawayList);
+                await File.WriteAllLinesAsync(endedGiveawayPath, participateEndedGiveawayList);
             }
         }
         static private async Task ReactMessageFromAllDiscordAccountAsync(RestRequest discordRequest, DiscordServer discordServer, JToken message)
@@ -182,33 +236,9 @@ namespace GivewayCheck
             else
                 return new RestClient();
         }
-        static private async Task ReadAllJsonConfigurationPropertiesAsync()
-        {
-            var launchConfiguration = JObject.Parse(await File.ReadAllTextAsync(launchConfigurationPath));
-            participateGiveawayPath = launchConfiguration["participateGiveawayPath"].ToString();
-            endedGiveawayPath = launchConfiguration["endedGiveawayPath"].ToString();
-            discordServersPath = launchConfiguration["discordServersPath"].ToString();
-            discordAccountsPath = launchConfiguration["discordAccountsPath"].ToString();
-            countAccountsForRead = int.Parse(launchConfiguration["countAccountsForRead"].ToString());
-            var delaysDiscordServersCheck = launchConfiguration["delayBeforeDiscordServersCheck"].ToString().Split('-');
-            var delaysDiscordAccountReact = launchConfiguration["delayBeforeDiscordAccountReact"].ToString().Split('-');
-            if (delaysDiscordServersCheck.Length == 2)
-            {
-                minDelayDiscordServersCheck = int.Parse(delaysDiscordServersCheck.First());
-                maxDelayDiscordServersCheck = int.Parse(delaysDiscordServersCheck.Last());
-            }
-            else if (delaysDiscordServersCheck.Length == 1)
-                maxDelayDiscordServersCheck = int.Parse(delaysDiscordServersCheck.First());
-            if (delaysDiscordAccountReact.Length == 2)
-            {
-                minDelayDiscordAccountReact = int.Parse(delaysDiscordAccountReact.First());
-                maxDelayDiscordAccountReact = int.Parse(delaysDiscordAccountReact.Last());
-            }
-            else if (delaysDiscordAccountReact.Length == 1)
-                maxDelayDiscordAccountReact = int.Parse(delaysDiscordAccountReact.First());
-        }
         static private async Task<List<DiscordServer>> ReadAllDiscordGiveawayServersAsync()
         {
+            await WriteMessageInLogFileAsync($"[{DateTime.Now.ToLongTimeString()}] Читаем имеющиеся в файле дискорд сервера...");
             var stringJsonDiscordSevers = JObject.Parse(await File.ReadAllTextAsync(discordServersPath));
             var jsonArrayDiscordServers = JArray.Parse(stringJsonDiscordSevers["discordServers"].ToString());
             return jsonArrayDiscordServers
@@ -220,8 +250,9 @@ namespace GivewayCheck
                         emoji: (string)discordServer["giveawayBot"]["emoji"])))
                 .ToList();
         }
-        static private List<DiscordAccount> ReadAllAwalableDiscordAccounts(int fromRow, int fromColumn, int toRow, int toColumn)
+        static private async Task<List<DiscordAccount>> ReadAllAwalableDiscordAccountsAsync(int fromRow, int fromColumn, int toRow, int toColumn)
         {
+            await WriteMessageInLogFileAsync($"[{DateTime.Now.ToLongTimeString()}] Читаем имеющиеся в файле дискорд аккаунты...");
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
             var discordAccounts = new List<DiscordAccount>();
             var sheet = new ExcelPackage(discordAccountsPath).Workbook.Worksheets.First();
