@@ -149,7 +149,7 @@ namespace GivewayCheck
                     !participateGiveawayList.Contains(giveawayPath) &&
                     (message.First["embeds"].First["footer"]["text"].ToString().Contains("Ends") ||
                     message.First["embeds"].First["footer"]["text"].ToString().Contains("winner")) &&
-                    !badPhrases.Any(badPrhase => message.First["embeds"].First["author"]["name"].ToString().Contains(badPrhase)))
+                    !badPhrases.Any(badPrhase => message.First["embeds"].First["author"]["name"].ToString().ToLower().Contains(badPrhase.ToLower())))
                 {
                     await WriteMessageInLogFileAsync($"[{DateTime.Now.ToLongTimeString()}] Найден гив по всем походящим параметрам - {giveawayPath}");
                     await ReactMessageFromAllDiscordAccountAsync(discordRequest, discordServers[discordServerIndex], message);
