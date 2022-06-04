@@ -17,7 +17,7 @@ namespace GivewayCheck.Controllers
     {
         List<string> badPhrases = new List<string>();
         List<string> participateGiveaways = new List<string>();
-        List<string> participateEndedGiveaways = new List<string>();
+        List<string> endedGiveaways = new List<string>();
         LaunchConfigurations configurations = new LaunchConfigurations();
 
         public DiscordGiveawayController()
@@ -26,8 +26,15 @@ namespace GivewayCheck.Controllers
 
         public async Task CheckGiveawaysAsync(DiscordAccount[] discordAccounts, DiscordGuild[] discordGuilds)
         {
+            badPhrases = (await File.ReadAllLinesAsync(configurations.BadGiveawayPhrasesPath)).ToList();
+            if (File.Exists(configurations.ParticipateGiveawaysPath))
+                participateGiveaways = (await File.ReadAllLinesAsync(configurations.ParticipateGiveawaysPath)).ToList();
+            if (File.Exists(configurations.EndedGiveawaysPath))
+                endedGiveaways = (await File.ReadAllLinesAsync(configurations.EndedGiveawaysPath)).ToList();
+
             await LogService.LogMessageAsync("Сhecking discord guilds for giveaway...");
             var discordRequest = new RestRequest();
+
 
             var discordGuildsIndex = 0;
             var discordAccountsIndex = 0;
@@ -41,7 +48,12 @@ namespace GivewayCheck.Controllers
                 var lastBotMessagesRespounce = await restClient.ExecuteGetAsync(discordRequest);
                 if (!lastBotMessagesRespounce.IsSuccessful)
                 {
-                    await LogService.LogMessageAsync($"Discord account got a timeout or missing access - {discordAccounts[discordAccountsIndex].Token}");
+                    if (lastBotMessagesRespounce.Content.Contains("TooManyRequests") && lastBotMessagesRespounce.Content.Contains("rate limited"))
+                        await LogService.LogMessageAsync($"Discord account got a timeout - {discordAccounts[discordAccountsIndex].Token}");
+                    else if (lastBotMessagesRespounce.Content.Contains("MissingAccess"))
+                        await LogService.LogMessageAsync($"Discord account missing access - {discordAccounts[discordAccountsIndex].Token}");
+                    else
+                        await LogService.LogMessageAsync($"Discord account got a timeout or missing access - {discordAccounts[discordAccountsIndex].Token}");
                     discordAccountsIndex++;
                     if (discordAccountsIndex == discordAccounts.Count())
                         discordAccountsIndex = 0;
@@ -66,9 +78,9 @@ namespace GivewayCheck.Controllers
                     {
                         await LogService.LogMessageAsync($"This giveaway is ended - {messagePath}");
                         participateGiveaways.Remove(messagePath);
-                        participateEndedGiveaways.Add(messagePath);
-                        await File.WriteAllLinesAsync(configurations.ParticipateGiveawayPath, participateGiveaways);
-                        await File.WriteAllLinesAsync(configurations.EndedGiveawayPath, participateEndedGiveaways);
+                        endedGiveaways.Add(messagePath);
+                        await File.WriteAllLinesAsync(configurations.ParticipateGiveawaysPath, participateGiveaways);
+                        await File.WriteAllLinesAsync(configurations.EndedGiveawaysPath, endedGiveaways);
                     }
                 }
 
@@ -97,7 +109,7 @@ namespace GivewayCheck.Controllers
         private bool CheckGiveawayForEnded(JToken message, string messagePath)
         {
             var isContainsInParticipateGiveaways = participateGiveaways.Contains(messagePath);
-            var isContainsInEndedGiveaways = participateEndedGiveaways.Contains(messagePath);
+            var isContainsInEndedGiveaways = endedGiveaways.Contains(messagePath);
             var haveEndedGiveawayDescription = !string.IsNullOrEmpty(message.First?["embeds"].First?["footer"]?["text"].ToString()) &&
                 message.First["embeds"].First["footer"]["text"].ToString().Contains("Ended");
 
@@ -132,7 +144,7 @@ namespace GivewayCheck.Controllers
             }
 
             participateGiveaways.Add(giveawayPath);
-            await File.AppendAllTextAsync(configurations.ParticipateGiveawayPath, giveawayPath + Environment.NewLine);
+            await File.AppendAllTextAsync(configurations.ParticipateGiveawaysPath, giveawayPath + Environment.NewLine);
             await LogService.LogMessageAsync($"{addedReactDiscordAccountsCount}/{discordAccounts.Count()} put a reaction on message giveaway - {giveawayPath}");
         }
         private RestClient CreateRestClient(Proxy? proxy) => proxy is null ?

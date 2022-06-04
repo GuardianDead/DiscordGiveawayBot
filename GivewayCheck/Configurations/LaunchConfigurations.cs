@@ -10,8 +10,8 @@ namespace DiscordGivewayBot.Configurations
         private string launchConfigurationPath = $@"{Environment.CurrentDirectory}/LaunchConfigurations.json";
 
         public string LogPath { get => $@"{Environment.CurrentDirectory}/Logs.txt"; }
-        public string ParticipateGiveawayPath { get => $@"{Environment.CurrentDirectory}/ParticipateGiveawaysPath.json"; }
-        public string EndedGiveawayPath { get => $@"{Environment.CurrentDirectory}/EndedGiveawaysPath.json"; }
+        public string ParticipateGiveawaysPath { get => $@"{Environment.CurrentDirectory}/ParticipateGiveawaysPath.json"; }
+        public string EndedGiveawaysPath { get => $@"{Environment.CurrentDirectory}/EndedGiveawaysPath.json"; }
         public string BadGiveawayPhrasesPath { get; private init; }
         public string DiscordGuildsPath { get; private init; }
         public string DiscordAccountsPath { get; private init; }
