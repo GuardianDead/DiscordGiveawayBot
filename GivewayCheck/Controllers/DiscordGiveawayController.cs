@@ -35,7 +35,6 @@ namespace GivewayCheck.Controllers
             await LogService.LogMessageAsync("Сhecking discord guilds for giveaway...");
             var discordRequest = new RestRequest();
 
-
             var discordGuildsIndex = 0;
             var discordAccountsIndex = 0;
             while (discordGuildsIndex < discordGuilds.Count())
@@ -89,7 +88,7 @@ namespace GivewayCheck.Controllers
         }
         private bool CheckMessageForСontinuingGiveaway(JToken message, string messagePath)
         {
-            var hasBadPrhase = badPhrases.Any(badPrhase => message.First["embeds"].First["author"]["name"].ToString().ToLower().Contains(badPrhase.ToLower()));
+            var hasBadPrhase = !string.IsNullOrEmpty(message.First?["embeds"].First?["author"]?["name"].ToString()) && badPhrases.Any(badPrhase => message.First["embeds"].First["author"]["name"].ToString().ToLower().Contains(badPrhase.ToLower()));
             var isContainsInParticipateGiveaways = participateGiveaways.Contains(messagePath);
             var haveСontinuingGiveawayDescription = !string.IsNullOrEmpty(message.First?["embeds"].First?["footer"]?["text"].ToString()) &&
                 !string.IsNullOrEmpty(message.First?["embeds"].First?["author"]?["name"].ToString()) &&
