@@ -11,7 +11,7 @@ namespace GivewayCheck
     {
         static LaunchConfigurations configurations = new LaunchConfigurations();
         static DiscordAccountController discordAccountController = new DiscordAccountController();
-        static DiscordGuildController discordGuildController = new DiscordGuildController();
+        static DiscordGiveawayBotController discordGiveawayBotController = new DiscordGiveawayBotController();
         static DiscordGiveawayController discordGiveawayController = new DiscordGiveawayController();
 
         static async Task Main(string[] args)
@@ -19,14 +19,14 @@ namespace GivewayCheck
             try
             {
                 var discordAccounts = await discordAccountController.ReadAccountsAsync(configurations.DiscordAccountsPath);
-                var discordGuilds = await discordGuildController.ReadDiscordGuildsAsync(configurations.DiscordGuildsPath);
-                await LogService.LogMessageAsync("Started checking discord guilds for giveaway");
+                var discordGiveawayBots = await discordGiveawayBotController.ReadDiscordGiveawayBotsAsync(configurations.DiscordGiveawayBotsPath);
+                await LogService.LogMessageAsync("Started checking discord giveaway bots for giveaway");
                 while (true)
                 {
-                    await discordGiveawayController.CheckGiveawaysAsync(discordAccounts.ToArray(), discordGuilds.ToArray());
+                    await discordGiveawayController.CheckDiscordGiveawaysAndRumbleBattlesAsync(discordAccounts.ToArray(), discordGiveawayBots.ToArray());
+                    await LogService.LogMessageAsync($"Discord giveaway bots checked.");
 
-                    await LogService.LogMessageAsync($"Discord guilds checked.");
-                    var delayInSecond = new Random().Next(configurations.MinDelayBeforeDiscordGuildsChecking, configurations.MaxDelayBeforeDiscordGuildsChecking);
+                    var delayInSecond = new Random().Next(configurations.MinDelayBeforeDiscordGiveawayBotsChecking, configurations.MaxDelayBeforeDiscordGiveawayBotsChecking);
                     await LogService.LogMessageAsync($"Sleep {delayInSecond}s...");
                     await Task.Delay(delayInSecond * 1000);
                 }

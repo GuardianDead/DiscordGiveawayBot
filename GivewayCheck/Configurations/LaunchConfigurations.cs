@@ -10,14 +10,16 @@ namespace DiscordGivewayBot.Configurations
         private string launchConfigurationPath = $@"{Environment.CurrentDirectory}/LaunchConfigurations.json";
 
         public string LogPath { get => $@"{Environment.CurrentDirectory}/Logs.txt"; }
-        public string ParticipateGiveawaysPath { get => $@"{Environment.CurrentDirectory}/ParticipateGiveawaysPath.json"; }
-        public string EndedGiveawaysPath { get => $@"{Environment.CurrentDirectory}/EndedGiveawaysPath.json"; }
+        public string ParticipateGiveawaysPath { get => $@"{Environment.CurrentDirectory}/ParticipateGiveaways.txt"; }
+        public string ParticipateRumbleBattlesPath { get => $@"{Environment.CurrentDirectory}/ParticipateRumbleBattles.txt"; }
+        public string WonGiveawaysPath { get => $@"{Environment.CurrentDirectory}/WonGiveaways.txt"; }
+        public string WonRumbleBattlesPath { get => $@"{Environment.CurrentDirectory}/WonRumbleBattles.txt"; }
         public string BadGiveawayPhrasesPath { get; private init; }
-        public string DiscordGuildsPath { get; private init; }
+        public string DiscordGiveawayBotsPath { get; private init; }
         public string DiscordAccountsPath { get; private init; }
 
-        public int MinDelayBeforeDiscordGuildsChecking { get; private init; }
-        public int MaxDelayBeforeDiscordGuildsChecking { get; private init; }
+        public int MinDelayBeforeDiscordGiveawayBotsChecking { get; private init; }
+        public int MaxDelayBeforeDiscordGiveawayBotsChecking { get; private init; }
         public int MinDelayBeforeFoundGiveaway { get; private init; }
         public int MaxDelayBeforeFoundGiveaway { get; private init; }
         public int MinDelayEachDiscordAccountReact { get; private init; }
@@ -28,29 +30,31 @@ namespace DiscordGivewayBot.Configurations
             LogService.LogMessage("Reading the configuration file..");
             var launchConfiguration = JObject.Parse(File.ReadAllText(launchConfigurationPath));
 
-            DiscordGuildsPath = launchConfiguration["discordGuildsPath"].ToString();
+            DiscordGiveawayBotsPath = launchConfiguration["discordGiveawayBotsPath"].ToString();
             DiscordAccountsPath = launchConfiguration["discordAccountsPath"].ToString();
             BadGiveawayPhrasesPath = launchConfiguration["badGiveawayPhrasesPath"].ToString();
 
-            var delaysBeforeDiscordGuildsChecking = launchConfiguration["delayAfterDiscordGuildsChecking"].ToString().Split('-');
+            var delaysBeforeDiscordGiveawayBotsChecking = launchConfiguration["delayAfterDiscordGiveawayBotsChecking"].ToString().Split('-');
             var delaysBeforeFoundGiveaway = launchConfiguration["delayBeforeFoundGiveaway"].ToString().Split('-');
             var delaysEachDiscordAccountReact = launchConfiguration["delayEachDiscordAccountReact"].ToString().Split('-');
 
-            switch (delaysBeforeDiscordGuildsChecking.Length)
+            switch (delaysBeforeDiscordGiveawayBotsChecking.Length)
             {
                 case 1:
-                    MaxDelayBeforeDiscordGuildsChecking = int.Parse(delaysBeforeDiscordGuildsChecking[0]);
+                    MinDelayBeforeDiscordGiveawayBotsChecking = int.Parse(delaysBeforeDiscordGiveawayBotsChecking[0]);
+                    MaxDelayBeforeDiscordGiveawayBotsChecking = int.Parse(delaysBeforeDiscordGiveawayBotsChecking[0]);
                     break;
                 case 2:
-                    MinDelayBeforeDiscordGuildsChecking = int.Parse(delaysBeforeDiscordGuildsChecking[0]);
-                    MaxDelayBeforeDiscordGuildsChecking = int.Parse(delaysBeforeDiscordGuildsChecking[1]);
+                    MinDelayBeforeDiscordGiveawayBotsChecking = int.Parse(delaysBeforeDiscordGiveawayBotsChecking[0]);
+                    MaxDelayBeforeDiscordGiveawayBotsChecking = int.Parse(delaysBeforeDiscordGiveawayBotsChecking[1]);
                     break;
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(delaysBeforeDiscordGuildsChecking), "Delay before checking all discord guilds entered incorrectly");
+                    throw new ArgumentOutOfRangeException(nameof(delaysBeforeDiscordGiveawayBotsChecking), "Delay before checking all discord giveaway bots entered incorrectly");
             }
             switch (delaysBeforeFoundGiveaway.Length)
             {
                 case 1:
+                    MinDelayBeforeFoundGiveaway = int.Parse(delaysBeforeFoundGiveaway[0]);
                     MaxDelayBeforeFoundGiveaway = int.Parse(delaysBeforeFoundGiveaway[0]);
                     break;
                 case 2:
@@ -63,6 +67,7 @@ namespace DiscordGivewayBot.Configurations
             switch (delaysEachDiscordAccountReact.Length)
             {
                 case 1:
+                    MinDelayEachDiscordAccountReact = int.Parse(delaysEachDiscordAccountReact[0]);
                     MaxDelayEachDiscordAccountReact = int.Parse(delaysEachDiscordAccountReact[0]);
                     break;
                 case 2:
