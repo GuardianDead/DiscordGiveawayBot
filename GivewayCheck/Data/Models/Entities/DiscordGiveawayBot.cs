@@ -1,15 +1,18 @@
-﻿namespace DiscordGivewayBot.Data.Models.Entities
+﻿using System.Collections.Generic;
+using System.Linq;
+
+namespace DiscordGivewayBot.Data.Models.Entities
 {
     public class DiscordGiveawayBot
     {
         public long Id { get; set; }
-        public DiscordGuild Guild { get; set; }
+        public List<DiscordGuild> Guilds { get; set; }
         public string Emoji { get; set; }
 
-        public DiscordGiveawayBot(long id, DiscordGuild guild, string emoji)
+        public DiscordGiveawayBot(long id, IEnumerable<DiscordGuild> guilds, string emoji)
         {
             Id = id;
-            Guild = guild;
+            Guilds = guilds.ToList();
             Emoji = emoji;
         }
     }

@@ -1,7 +1,6 @@
 ﻿using DiscordGivewayBot.Configurations;
 using DiscordGivewayBot.Data.Models;
 using DiscordGivewayBot.Data.Models.Entities;
-using GivewayCheck.Domain;
 using GivewayCheck.Services;
 using Newtonsoft.Json.Linq;
 using RestSharp;
@@ -22,7 +21,7 @@ namespace GivewayCheck.Controllers
         List<DiscordRumbleBattle> participateRumbleBattles = new List<DiscordRumbleBattle>();
         List<string> wonGiveaways = new List<string>();
         List<string> wonRumbleBattles = new List<string>();
-        readonly LaunchConfigurations configurations = new LaunchConfigurations();
+        LaunchConfigurations configurations = new LaunchConfigurations();
 
         public DiscordGiveawayController()
         {
@@ -31,18 +30,18 @@ namespace GivewayCheck.Controllers
         public async Task CheckDiscordGiveawaysAndRumbleBattlesAsync(DiscordAccount[] discordAccounts, DiscordGiveawayBot[] discordGiveawayBots)
         {
             badPhrases = (await File.ReadAllLinesAsync(configurations.BadGiveawayPhrasesPath)).ToList();
-            if (File.Exists(configurations.ParticipateGiveawaysPath))
-                participateGiveaways = (await File.ReadAllLinesAsync(configurations.ParticipateGiveawaysPath)).ToList();
-            if (File.Exists(configurations.ParticipateRumbleBattlesPath))
-                participateRumbleBattles = (await File.ReadAllLinesAsync(configurations.ParticipateRumbleBattlesPath)).Select(participateRumbleBattleStirng =>
+            if (File.Exists(LaunchConfigurations.ParticipateGiveawaysPath))
+                participateGiveaways = (await File.ReadAllLinesAsync(LaunchConfigurations.ParticipateGiveawaysPath)).ToList();
+            if (File.Exists(LaunchConfigurations.ParticipateRumbleBattlesPath))
+                participateRumbleBattles = (await File.ReadAllLinesAsync(LaunchConfigurations.ParticipateRumbleBattlesPath)).Select(participateRumbleBattleStirng =>
                 {
                     var splittedParticipateRumbleBattleStirng = participateRumbleBattleStirng.Split(';');
                     return new DiscordRumbleBattle(splittedParticipateRumbleBattleStirng[0], DateTime.Parse(splittedParticipateRumbleBattleStirng[1]));
                 }).ToList();
-            if (File.Exists(configurations.WonGiveawaysPath))
-                wonGiveaways = (await File.ReadAllLinesAsync(configurations.WonGiveawaysPath)).Select(wonGiveawayString => wonGiveawayString.Split(';').First()).ToList();
-            if (File.Exists(configurations.WonRumbleBattlesPath))
-                wonRumbleBattles = (await File.ReadAllLinesAsync(configurations.WonRumbleBattlesPath)).Select(wonGiveawayString => wonGiveawayString.Split(';').First()).ToList();
+            if (File.Exists(LaunchConfigurations.WonGiveawaysPath))
+                wonGiveaways = (await File.ReadAllLinesAsync(LaunchConfigurations.WonGiveawaysPath)).Select(wonGiveawayString => wonGiveawayString.Split(';').First()).ToList();
+            if (File.Exists(LaunchConfigurations.WonRumbleBattlesPath))
+                wonRumbleBattles = (await File.ReadAllLinesAsync(LaunchConfigurations.WonRumbleBattlesPath)).Select(wonGiveawayString => wonGiveawayString.Split(';').First()).ToList();
 
             await LogService.LogMessageAsync("Сhecking discord giveaway bots for giveaway...");
             var discordRequest = new RestRequest();
@@ -50,72 +49,76 @@ namespace GivewayCheck.Controllers
             var discordAccountsIndex = 0;
             while (discordGiveawayBotsIndex < discordGiveawayBots.Length)
             {
-                discordRequest.AddHeader("authorization", discordAccounts[discordAccountsIndex].Token);
-                var restClient = CreateRestClient(discordAccounts[discordAccountsIndex]?.Proxy);
-                discordRequest.Resource = $"https://discord.com/api/v9/guilds/{discordGiveawayBots[discordGiveawayBotsIndex].Guild.Id}" +
-                    $"/messages/search?author_id={discordGiveawayBots[discordGiveawayBotsIndex].Id}";
-
-                var lastBotMessagesRespounce = await restClient.ExecuteGetAsync(discordRequest);
-                if (!lastBotMessagesRespounce.IsSuccessful)
+                var discordGiveawayBotGuildsIndex = 0;
+                while (discordGiveawayBotGuildsIndex < discordGiveawayBots[discordGiveawayBotsIndex].Guilds.Count)
                 {
-                    if (lastBotMessagesRespounce.Content.Contains("TooManyRequests") && lastBotMessagesRespounce.Content.Contains("rate limited"))
-                        await LogService.LogMessageAsync($"Discord account got a timeout - {discordAccounts[discordAccountsIndex].Token}");
-                    else if (lastBotMessagesRespounce.Content.Contains("MissingAccess"))
-                        await LogService.LogMessageAsync($"Discord account missing access - {discordAccounts[discordAccountsIndex].Token}");
-                    else
-                        await LogService.LogMessageAsync($"Discord account got a timeout or missing access - {discordAccounts[discordAccountsIndex].Token}");
-                    discordAccountsIndex++;
-                    if (discordAccountsIndex == discordAccounts.Length)
-                        discordAccountsIndex = 0;
-                    continue;
-                }
+                    discordRequest.AddOrUpdateHeader("authorization", discordAccounts[discordAccountsIndex].Token);
+                    var restClient = CreateRestClient(discordAccounts[discordAccountsIndex]?.Proxy);
+                    discordRequest.Resource = $"https://discord.com/api/v9/guilds/{discordGiveawayBots[discordGiveawayBotsIndex].Guilds[discordGiveawayBotGuildsIndex].Id}" +
+                        $"/messages/search?author_id={discordGiveawayBots[discordGiveawayBotsIndex].Id}";
 
-                var lastDiscordGiveawayBotMessages = JArray.Parse(JObject.Parse(lastBotMessagesRespounce.Content)["messages"].ToString());
-                foreach (var message in lastDiscordGiveawayBotMessages)
-                {
-                    var messagePath = $@"{discordGiveawayBots[discordGiveawayBotsIndex].Id}/{message.First["channel_id"]}/{message.First["id"]}";
-                    if (CheckMessageForСontinuingGiveaway(message, messagePath))
+                    var lastBotMessagesRespounce = await restClient.ExecuteGetAsync(discordRequest);
+                    if (!lastBotMessagesRespounce.IsSuccessful)
                     {
-                        await LogService.LogMessageAsync($"Giveaway found by suitable parameters - {messagePath}");
-                        await ReactMessageFromAllDiscordAccountAsync(discordAccounts, discordRequest, discordGiveawayBots[discordGiveawayBotsIndex], message);
-                        participateGiveaways.Add(messagePath);
-                        await File.AppendAllTextAsync(configurations.ParticipateGiveawaysPath, messagePath + Environment.NewLine);
+                        if (lastBotMessagesRespounce.Content.Contains("TooManyRequests") && lastBotMessagesRespounce.Content.Contains("rate limited"))
+                            await LogService.LogMessageAsync($"Discord account got a timeout - {discordAccounts[discordAccountsIndex].Token}");
+                        else if (lastBotMessagesRespounce.Content.Contains("MissingAccess"))
+                            await LogService.LogMessageAsync($"Discord account missing access - {discordAccounts[discordAccountsIndex].Token}");
+                        else
+                            await LogService.LogMessageAsync($"Discord account got a timeout - {discordAccounts[discordAccountsIndex].Token}");
+                        discordAccountsIndex++;
+                        if (discordAccountsIndex == discordAccounts.Length)
+                            discordAccountsIndex = 0;
+                        continue;
                     }
-                    else if (CheckMessageForEndedGiveaway(message, messagePath))
-                    {
-                        await LogService.LogMessageAsync($"This giveaway is ended - {messagePath}");
-                        foreach (var discordAccount in discordAccounts)
-                            if (CheckWinningDiscordAccount(discordAccount.Id, message.First["embeds"].First["description"].ToString()))
-                            {
-                                await LogService.LogMessageAsync($"Discord account won in giveaway - {discordAccount.Token};{messagePath};{discordGiveawayBots[discordGiveawayBotsIndex].Guild.Name}");
-                                await File.AppendAllTextAsync(configurations.WonGiveawaysPath, $"{messagePath};{discordAccount.Token};{discordGiveawayBots[discordGiveawayBotsIndex].Guild.Name}" + Environment.NewLine);
-                                if (!wonGiveaways.Contains(messagePath))
-                                    wonGiveaways.Add(messagePath);
-                            }
-                        participateGiveaways.Remove(messagePath);
-                        await File.WriteAllLinesAsync(configurations.ParticipateGiveawaysPath, participateGiveaways);
-                    }
-                    else if (CheckMessageForСontinuingRumbleBattle(message, messagePath))
-                    {
-                        await LogService.LogMessageAsync($"Rumble battle found by suitable parameters - {messagePath}");
-                        await ReactMessageFromAllDiscordAccountAsync(discordAccounts, discordRequest, discordGiveawayBots[discordGiveawayBotsIndex], message);
-                        participateRumbleBattles.Add(new DiscordRumbleBattle(messagePath, DateTime.Parse(message.First["timestamp"].ToString())));
-                        await File.AppendAllTextAsync(configurations.ParticipateRumbleBattlesPath, $"{messagePath};{message.First["timestamp"]}" + Environment.NewLine);
-                    }
-                    else if (CheckMessageForEndedRumbleBattle(message, messagePath))
-                    {
-                        await LogService.LogMessageAsync($"This rumble battle is ended - {messagePath}");
-                        foreach (var discordAccount in discordAccounts)
-                            if (CheckWinningDiscordAccount(discordAccount.Id, message.First["mentions"].First["id"].ToString()))
-                            {
-                                await LogService.LogMessageAsync($"Discord account won in rumble battle - {discordAccount.Token};{messagePath};{discordGiveawayBots[discordGiveawayBotsIndex].Guild.Name}");
-                                await File.AppendAllTextAsync(configurations.WonRumbleBattlesPath, $"{messagePath};{discordAccount.Token};{discordGiveawayBots[discordGiveawayBotsIndex].Guild.Name}" + Environment.NewLine);
-                                if (!wonRumbleBattles.Contains(messagePath))
-                                    wonRumbleBattles.Add(messagePath);
-                            }
-                    }
-                }
 
+                    var lastDiscordGiveawayBotMessages = JArray.Parse(JObject.Parse(lastBotMessagesRespounce.Content)["messages"].ToString());
+                    foreach (var message in lastDiscordGiveawayBotMessages)
+                    {
+                        var messagePath = $@"{discordGiveawayBots[discordGiveawayBotsIndex].Id}/{message.First["channel_id"]}/{message.First["id"]}";
+                        if (CheckMessageForСontinuingGiveaway(message, messagePath))
+                        {
+                            await LogService.LogMessageAsync($"Giveaway found by suitable parameters - {messagePath}");
+                            await ReactMessageFromAllDiscordAccountAsync(discordAccounts, discordGiveawayBots[discordGiveawayBotsIndex].Guilds[discordGiveawayBotGuildsIndex], discordGiveawayBots[discordGiveawayBotsIndex].Emoji, message);
+                            participateGiveaways.Add(messagePath);
+                            await File.AppendAllTextAsync(LaunchConfigurations.ParticipateGiveawaysPath, messagePath + Environment.NewLine);
+                        }
+                        else if (CheckMessageForEndedGiveaway(message, messagePath))
+                        {
+                            await LogService.LogMessageAsync($"This giveaway is ended - {messagePath}");
+                            foreach (var discordAccount in discordAccounts)
+                                if (CheckWinningDiscordAccount(discordAccount.Id, message.First["embeds"].First["description"].ToString()))
+                                {
+                                    await LogService.LogMessageAsync($"Discord account won in giveaway - {discordAccount.Token};{messagePath};{discordGiveawayBots[discordGiveawayBotsIndex].Guilds[discordGiveawayBotGuildsIndex].Name}");
+                                    await File.AppendAllTextAsync(LaunchConfigurations.WonGiveawaysPath, $"{messagePath};{discordAccount.Token};{discordGiveawayBots[discordGiveawayBotsIndex].Guilds[discordGiveawayBotGuildsIndex].Name}" + Environment.NewLine);
+                                    if (!wonGiveaways.Contains(messagePath))
+                                        wonGiveaways.Add(messagePath);
+                                }
+                            participateGiveaways.Remove(messagePath);
+                            await File.WriteAllLinesAsync(LaunchConfigurations.ParticipateGiveawaysPath, participateGiveaways);
+                        }
+                        else if (CheckMessageForСontinuingRumbleBattle(message, messagePath))
+                        {
+                            await LogService.LogMessageAsync($"Rumble battle found by suitable parameters - {messagePath}");
+                            await ReactMessageFromAllDiscordAccountAsync(discordAccounts, discordGiveawayBots[discordGiveawayBotsIndex].Guilds[discordGiveawayBotGuildsIndex], discordGiveawayBots[discordGiveawayBotsIndex].Emoji, message);
+                            participateRumbleBattles.Add(new DiscordRumbleBattle(messagePath, DateTime.Parse(message.First["timestamp"].ToString())));
+                            await File.AppendAllTextAsync(LaunchConfigurations.ParticipateRumbleBattlesPath, $"{messagePath};{message.First["timestamp"]}" + Environment.NewLine);
+                        }
+                        else if (CheckMessageForEndedRumbleBattle(message, messagePath))
+                        {
+                            await LogService.LogMessageAsync($"This rumble battle is ended - {messagePath}");
+                            foreach (var discordAccount in discordAccounts)
+                                if (CheckWinningDiscordAccount(discordAccount.Id, message.First["mentions"].First["id"].ToString()))
+                                {
+                                    await LogService.LogMessageAsync($"Discord account won in rumble battle - {discordAccount.Token};{messagePath};{discordGiveawayBots[discordGiveawayBotsIndex].Guilds[discordGiveawayBotGuildsIndex].Name}");
+                                    await File.AppendAllTextAsync(LaunchConfigurations.WonRumbleBattlesPath, $"{messagePath};{discordAccount.Token};{discordGiveawayBots[discordGiveawayBotsIndex].Guilds[discordGiveawayBotGuildsIndex].Name}" + Environment.NewLine);
+                                    if (!wonRumbleBattles.Contains(messagePath))
+                                        wonRumbleBattles.Add(messagePath);
+                                }
+                        }
+                    }
+                    discordGiveawayBotGuildsIndex++;
+                }
                 discordGiveawayBotsIndex++;
             }
         }
@@ -170,14 +173,14 @@ namespace GivewayCheck.Controllers
             var giveawayWinnerIds = new Regex("\\d{18}").Matches(giveawayMessage);
             return giveawayWinnerIds.Any(giveawayWinnerId => long.Parse(giveawayWinnerId.Value) == discordAccountId);
         }
-        public async Task ReactMessageFromAllDiscordAccountAsync(IEnumerable<DiscordAccount> discordAccounts, RestRequest discordRequest, DiscordGiveawayBot discordGiveawayBot, JToken message)
+        public async Task ReactMessageFromAllDiscordAccountAsync(IEnumerable<DiscordAccount> discordAccounts, DiscordGuild discordGuild, string emoji, JToken message)
         {
             var channelId = message.First["channel_id"].ToString();
             var messageId = message.First["id"].ToString();
-            var giveawayPath = $@"{discordGiveawayBot.Guild.Id}/{channelId}/{messageId}";
-            discordRequest.Resource = $"https://discord.com/api/v9/channels/{channelId}/messages/{messageId}/reactions/{discordGiveawayBot.Emoji}/@me";
-
+            var giveawayPath = $@"{discordGuild.Id}/{channelId}/{messageId}";
             var addedReactDiscordAccountsCount = 0;
+            var discordRequest = new RestRequest($"https://discord.com/api/v9/channels/{channelId}/messages/{messageId}/reactions/{emoji}/@me");
+
             foreach (var discordAccount in discordAccounts)
             {
                 var client = CreateRestClient(discordAccount?.Proxy);
@@ -200,14 +203,14 @@ namespace GivewayCheck.Controllers
 
             await LogService.LogMessageAsync($"{addedReactDiscordAccountsCount}/{discordAccounts.Count()} put a reaction on message giveaway - {giveawayPath}");
         }
-        private RestClient CreateRestClient(Proxy? proxy) => proxy is null ?
-                new RestClient() :
-                new RestClient(new RestClientOptions()
-                {
-                    Proxy = new WebProxy(proxy.Address, proxy.Port)
-                    {
-                        Credentials = new NetworkCredential(proxy.Login, proxy.Password)
-                    }
-                });
+        private RestClient CreateRestClient(Proxy proxy) => proxy is null ?
+        new RestClient() :
+        new RestClient(new RestClientOptions()
+        {
+            Proxy = new WebProxy(proxy.Address, proxy.Port)
+            {
+                Credentials = new NetworkCredential(proxy.Login, proxy.Password)
+            }
+        });
     }
 }

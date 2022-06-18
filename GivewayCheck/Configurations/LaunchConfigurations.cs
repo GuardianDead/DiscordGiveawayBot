@@ -7,17 +7,19 @@ namespace DiscordGivewayBot.Configurations
 {
     public class LaunchConfigurations
     {
-        private string launchConfigurationPath = $@"{Environment.CurrentDirectory}/LaunchConfigurations.json";
+        static private string launchConfigurationPath = $@"{Environment.CurrentDirectory}/LaunchConfigurations.json";
 
-        public string LogPath { get => $@"{Environment.CurrentDirectory}/Logs.txt"; }
-        public string ParticipateGiveawaysPath { get => $@"{Environment.CurrentDirectory}/ParticipateGiveaways.txt"; }
-        public string ParticipateRumbleBattlesPath { get => $@"{Environment.CurrentDirectory}/ParticipateRumbleBattles.txt"; }
-        public string WonGiveawaysPath { get => $@"{Environment.CurrentDirectory}/WonGiveaways.txt"; }
-        public string WonRumbleBattlesPath { get => $@"{Environment.CurrentDirectory}/WonRumbleBattles.txt"; }
+        static public string LogPath { get => $@"{Environment.CurrentDirectory}/Logs.txt"; }
+        static public string ParticipateGiveawaysPath { get => $@"{Environment.CurrentDirectory}/ParticipateGiveaways.txt"; }
+        static public string ParticipateRumbleBattlesPath { get => $@"{Environment.CurrentDirectory}/ParticipateRumbleBattles.txt"; }
+        static public string WonGiveawaysPath { get => $@"{Environment.CurrentDirectory}/WonGiveaways.txt"; }
+        static public string WonRumbleBattlesPath { get => $@"{Environment.CurrentDirectory}/WonRumbleBattles.txt"; }
+        static public string WonWLsPath { get => $@"{Environment.CurrentDirectory}/WonWL's.txt"; }
         public string BadGiveawayPhrasesPath { get; private init; }
         public string DiscordGiveawayBotsPath { get; private init; }
         public string DiscordAccountsPath { get; private init; }
 
+        public int DelayBeforeDiscordAccountsWlRoleChecking { get; private init; }
         public int MinDelayBeforeDiscordGiveawayBotsChecking { get; private init; }
         public int MaxDelayBeforeDiscordGiveawayBotsChecking { get; private init; }
         public int MinDelayBeforeFoundGiveaway { get; private init; }
@@ -34,6 +36,7 @@ namespace DiscordGivewayBot.Configurations
             DiscordAccountsPath = launchConfiguration["discordAccountsPath"].ToString();
             BadGiveawayPhrasesPath = launchConfiguration["badGiveawayPhrasesPath"].ToString();
 
+            DelayBeforeDiscordAccountsWlRoleChecking = int.Parse(launchConfiguration["delayBeforeDiscordAccountsWlRoleChecking"].ToString());
             var delaysBeforeDiscordGiveawayBotsChecking = launchConfiguration["delayAfterDiscordGiveawayBotsChecking"].ToString().Split('-');
             var delaysBeforeFoundGiveaway = launchConfiguration["delayBeforeFoundGiveaway"].ToString().Split('-');
             var delaysEachDiscordAccountReact = launchConfiguration["delayEachDiscordAccountReact"].ToString().Split('-');

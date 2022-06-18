@@ -1,5 +1,6 @@
-﻿using DiscordGivewayBot.Data.Models.Entities;
-using GivewayCheck.Domain;
+﻿using DiscordGivewayBot.Data.Models;
+using DiscordGivewayBot.Data.Models.Entities;
+using DiscordGivewayBot.Services;
 using GivewayCheck.Services;
 using Newtonsoft.Json.Linq;
 using RestSharp;
@@ -12,6 +13,8 @@ namespace GivewayCheck.Controllers
 {
     public class DiscordAccountController
     {
+        ProxyService proxyService = new ProxyService();
+
         public DiscordAccountController()
         {
         }
@@ -30,6 +33,9 @@ namespace GivewayCheck.Controllers
                 if (discordAccountStringValues.Length != 1)
                     discordAccountProxy = new Proxy(discordAccountStringValues[1], int.Parse(discordAccountStringValues[2]), discordAccountStringValues[3], discordAccountStringValues[4]);
 
+                if (discordAccountProxy is null || !proxyService.CheckProxyForAlive(discordAccountProxy))
+                    continue;
+
                 var discordAccountId = await ReadAccountIdAsync(discordAccountStringValues[0], discordAccountProxy);
 
                 discordAccounts.Add(new DiscordAccount(discordAccountId, discordAccountStringValues[0], discordAccountProxy));
@@ -38,26 +44,26 @@ namespace GivewayCheck.Controllers
             return discordAccounts;
         }
 
-        private async Task<long> ReadAccountIdAsync(string token, Proxy? proxy)
+        private async Task<long> ReadAccountIdAsync(string token, Proxy proxy)
         {
-            var client = CreateRestClient(proxy);
+            var client = CreateClient(proxy);
             var request = new RestRequest("https://discord.com/api/v9/users/@me");
             request.AddHeader("authorization", token);
 
-            var response = await client.GetAsync(request);
+            var response = await client.ExecuteGetAsync(request);
             if (!response.IsSuccessful)
                 await LogService.LogMessageAsync($"Failed to get token id when reading discord accounts - {token}");
 
             return long.Parse(JObject.Parse(response.Content)["id"].ToString());
         }
-        private RestClient CreateRestClient(Proxy? proxy) => proxy is null ?
-        new RestClient() :
-        new RestClient(new RestClientOptions()
-        {
-            Proxy = new WebProxy(proxy.Address, proxy.Port)
+        private RestClient CreateClient(Proxy proxy) => proxy is null ?
+            new RestClient() :
+            new RestClient(new RestClientOptions()
             {
-                Credentials = new NetworkCredential(proxy.Login, proxy.Password)
-            }
-        });
+                Proxy = new WebProxy(proxy.Address, proxy.Port)
+                {
+                    Credentials = new NetworkCredential(proxy.Login, proxy.Password)
+                }
+            });
     }
 }

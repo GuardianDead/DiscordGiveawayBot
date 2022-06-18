@@ -1,4 +1,4 @@
-﻿namespace GivewayCheck.Domain
+﻿namespace DiscordGivewayBot.Data.Models
 {
     public class Proxy
     {

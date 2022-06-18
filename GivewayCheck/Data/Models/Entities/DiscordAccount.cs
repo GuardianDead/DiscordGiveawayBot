@@ -1,6 +1,4 @@
-﻿using GivewayCheck.Domain;
-
-namespace DiscordGivewayBot.Data.Models.Entities
+﻿namespace DiscordGivewayBot.Data.Models.Entities
 {
     public class DiscordAccount
     {
